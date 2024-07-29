@@ -9,7 +9,7 @@
 #define C 3 // representa uma base Citosina
 #define X 4 // representa um gap
 
-#define sair 11
+#define sair 12
 
 #define maxSeq 10000
 
@@ -39,6 +39,8 @@ int matrizPesos[4][4] = {
     {0, 0, 0, 1}
 };
 
+int numAlignments = 1; // Número de alinhamentos a serem exibidos
+
 /* leitura do tamanho da sequencia maior */
 void leTamMaior(void) {
     printf("\nLeitura do Tamanho da Sequencia Maior:");
@@ -57,6 +59,7 @@ void leTamMenor(void) {
     } while (tamSeqMenor < 1 || tamSeqMenor > tamSeqMaior);
 }
 
+/* leitura do valor da penalidade de gap */
 void lePenalidade(void) {
     printf("\nLeitura da Penalidade de Gap:");
     do {
@@ -65,6 +68,7 @@ void lePenalidade(void) {
     } while (penalGap < 0);
 }
 
+/* leitura da matriz de pesos */
 void leMatrizPesos(void) {
     int i, j;
     printf("\nLeitura da Matriz de Pesos:\n");
@@ -77,6 +81,7 @@ void leMatrizPesos(void) {
     }
 }
 
+/* mostra da matriz de pesos */
 void mostraMatrizPesos(void) {
     int i, j;
     printf("\nMatriz de Pesos Atual:");
@@ -285,6 +290,35 @@ void geraMatrizEscores(void) {
     printf("\nUltimo Maior escore = %d na celula [%d,%d]", maior, linMaior, colMaior);
 }
 
+/* salva a matriz de escores em um arquivo */
+void salvaMatrizEscores(const char *filename) {
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        printf("\nErro ao abrir o arquivo para escrita.\n");
+        return;
+    }
+
+    fprintf(file, "%4c%4c", ' ', ' ');
+    for (int i = 0; i < tamSeqMaior; i++) {
+        fprintf(file, "%4c", mapaBases[seqMaior[i]]);
+    }
+    fprintf(file, "\n");
+
+    for (int lin = 0; lin <= tamSeqMenor; lin++) {
+        if (lin == 0)
+            fprintf(file, "%4c", '-');
+        else
+            fprintf(file, "%4c", mapaBases[seqMenor[lin - 1]]);
+        for (int col = 0; col <= tamSeqMaior; col++) {
+            fprintf(file, "%4d", matrizEscores[lin][col]);
+        }
+        fprintf(file, "\n");
+    }
+
+    fclose(file);
+    printf("\nMatriz de escores salva em %s.\n", filename);
+}
+
 void mostraMatrizEscores(void) {
     int i, lin, col;
 
@@ -318,7 +352,7 @@ void mostraMatrizEscores(void) {
 }
 
 void traceBack(void) {
-    int tbLin, tbCol, peso, pos, posAux, aux, i;
+    int tbLin, tbCol, peso, pos, aux, i;
 
     printf("\nGeracao do Alinhamento Global:\n");
     tbLin = tamSeqMenor;
@@ -396,6 +430,16 @@ void mostraAlinhamentoGlobal(void) {
     printf("\n");
 }
 
+void leNumAlignments(void) {
+    printf("\nDigite o numero de alinhamentos a serem exibidos: ");
+    do {
+        scanf("%d", &numAlignments);
+        if (numAlignments < 1) {
+            printf("Numero invalido. Digite novamente: ");
+        }
+    } while (numAlignments < 1);
+}
+
 int menuOpcao(void) {
     int op;
     char enter;
@@ -412,7 +456,8 @@ int menuOpcao(void) {
         printf("\n<08> Mostrar Matriz de Escores");
         printf("\n<09> Gerar Alinhamento Global");
         printf("\n<10> Mostrar Alinhamento Global");
-        printf("\n<11> Sair");
+        printf("\n<11> Salvar Matriz de Escores em Arquivo");
+        printf("\n<12> Sair");
         printf("\nDigite a opcao => ");
         scanf("%d", &op);
         scanf("%c", &enter);
@@ -463,10 +508,14 @@ void trataOpcao(int op) {
             mostraMatrizEscores();
             break;
         case 9:
+            leNumAlignments();
             traceBack();
             break;
         case 10:
             mostraAlinhamentoGlobal();
+            break;
+        case 11:
+            salvaMatrizEscores("matriz_escores.txt");
             break;
     }
 }
