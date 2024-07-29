@@ -58,13 +58,11 @@ void leTamMenor(void) {
 }
 
 void lePenalidade(void) {
-    int penal;
     printf("\nLeitura da Penalidade de Gap:");
     do {
         printf("\nDigite valor >= 0 = ");
-        scanf("%d", &penal);
-    } while (penal < 0);
-    penalGap = penal;
+        scanf("%d", &penalGap);
+    } while (penalGap < 0);
 }
 
 void leMatrizPesos(void) {
