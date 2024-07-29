@@ -1,18 +1,17 @@
 /*
 
-Programa de Alinhamento de Genoma Vers�o 28/03/2022.
+Programa de Alinhamento de Genoma Versao 27/07/2024.
 
-Programa "sequencial" baseado no metodo Needleman-Wunsch, desenvolvido
-por Saul B. Needleman e Christian D. Wunsch, publicado em 1970, conforme segue:
+Programa "sequencial" baseado no metodo Needleman-Wunsch, desenvolvido por Saul
+B. Needleman e Christian D. Wunsch, publicado em 1970, conforme segue:
 
-Needleman, Saul B. & Wunsch, Christian D. (1970).
-"A general method applicable to the search for similarities in the
-amino acid sequence of two proteins". Journal of Molecular Biology.
-48 (3):443-53.
+Needleman, Saul B. & Wunsch, Christian D. (1970)."A general method applicable to
+the search for similarities in the amino acid sequence of two proteins". Journal
+of Molecular Biology.48 (3):443-53.
 
-Este programa NAO pode ser usado, da forma original ou modificada, completa
-ou parcial, para finalidade comercial ou lucrativa, sem a previa autorizacao
-dos seus desenvolvedores, os quais detem os direitos autorais.
+Este programa NAO pode ser usado, da forma original ou modificada, completa ou
+parcial, para finalidade comercial ou lucrativa, sem a previa autorizacao dos
+seus desenvolvedores, os quais detem os direitos autorais.
 
 Este programa PODE ser livremente e gratuitamente usado, da forma original ou
 modificada, completa ou parcial, como apoio ao processo de ensino-aprendizagem,
@@ -27,19 +26,19 @@ codigo modificado, informando quais foram as modificacoes realizadas.
 Lista de Desenvolvedores:
 
 Desenvolvedor: Ronaldo Augusto de Lara Goncalves
-Data da modificacao: 28/03/2022
+Data da ultima atualizacao: 27/07/2024
 eMail: ralgonca@gmail.com
 Whatsapp: 55(44)99159-2310
-Modificacoes realizadas: desenvolvimento do codigo original, composto pelos modulos
-leTamMaior(), leTamMenor(), lePenalidade(), menuOpcao(void), trataOpcao(), geraSequencias(),
-leMatrizPesos(), mostraMatrizPesos(), leGrauMutacao(), geraMatrizScores(), mostraMatrizScores(),
-leSequencias(), geraSequencias(), mostraSequencias(), traceBack(), mostraAlinhamentoGlobal()
-e main().
+Modificacoes realizadas: desenvolvimento do codigo original, composto pelos
+modulos leTamMaior(), leTamMenor(), lePenalidade(), menuOpcao(void), trataOpcao(),
+geraSequencias(), leMatrizPesos(), mostraMatrizPesos(), leGrauMutacao(),
+geraMatrizEscores(), mostraMatrizEscores(), leSequencias(), geraSequencias(),
+mostraSequencias(), traceBack(), mostraAlinhamentoGlobal() e main().
 
 
 
 ======================================
-BREVE DESCRI��O:
+BREVE DESCRICAO:
 
 ======================================
 
@@ -50,52 +49,60 @@ BREVE DESCRI��O:
 #include <string.h>
 #include <time.h>
 
-#define A 0
-#define T 1
-#define G 2
-#define C 3
+#define A 0 // representa uma base Adenina
+#define T 1 // representa uma base Timina
+#define G 2 // representa uma base Guanina
+#define C 3 // representa uma base Citosina
+#define X 4 // representa um gap
+
 #define sair 11
 
-#define maxSeq 1000
+#define maxSeq 1000 // tamanho maximo de bases em uma sequencia genomica
 
-/* baseMapa mapeia indices em caracteres que representam as bases,
-   sendo 0='A', 1='T', 2='G', 3='C' e 4='-' representando gap */
-char baseMapa[5]={'A','T','G','C','-'};
+/* mapaBases mapeia indices em caracteres que representam as bases, sendo 0='A',
+1='T', 2='G', 3='C' e 4='-' representando gap */
 
-/* seqMaior e seqMenor representam as duas sequencias de bases de
-   entrada, a serem comparadas, inicializadas conforme segue. Elas
-   conterao os indices aos inves dos proprios caracteres. seqMenor
-   deve ser menor ou igual a seqMaior. */
-char seqMaior[maxSeq]={A,A,C,T,T,A},
-     seqMenor[maxSeq]={A,C,T,T,G,A},
-     alinhaMaior[maxSeq],
-     alinhaMenor[maxSeq];
+char mapaBases[5]={'A','T','G','C','-'};
 
-/* matrizScores representa a matriz de scores que sera preenchida
-   pelo metodo. A matriz, ao final de seu preenchimento, permitira
-   obter o melhor alinhamento global entre as sequencias seqMaior e
-   seqMenor, por meio de uma operacao denominada TraceBack. Uma linha
-   e uma coluna extras sao adicionadas na matriz para correlacionar
-   as bases com gaps. Trata-se da linha 0 e coluna 0. A matriz de scores
-   tera tamSeqMenor+1 linhas e tamSeqMaior+1 colunas. Considera-se a
-   primeira dimensao da matriz como linhas e a segunda como colunas.*/
-int matrizScores[maxSeq+1][maxSeq+1];
+/* seqMaior e seqMenor representam as duas sequencias de bases de entrada, a
+   serem comparadas, inicializadas conforme segue. Elas conterao os indices aos
+   inves dos proprios caracteres. seqMenor deve ser menor ou igual a seqMaior. */
+
+int  seqMaior[maxSeq]={A,A,C,T,T,A},
+     seqMenor[maxSeq]={A,C,T,T,G,A};
+
+/* alinhaGMaior representa a sequencia maior ja alinhada, assim como alinhaGMenor,
+   ambas obtidas no traceback. As duas juntas, pareadas, formam o alinhamento
+   global. */
+
+int  alinhaGMaior[maxSeq],
+     alinhaGMenor[maxSeq];
+
+/* matrizEscores representa a matriz de escores que sera preenchida pelo metodo.
+   A matriz, ao final de seu preenchimento, permitira obter o melhor alinhamento
+   global entre as sequencias seqMaior e seqMenor, por meio de uma operacao
+   denominada TraceBack. Uma linha e uma coluna extras sao adicionadas na matriz
+   para inicializar as pontuacoes/escores. Trata-se da linha 0 e coluna 0. A
+   matriz de escores tera tamSeqMenor+1 linhas e tamSeqMaior+1 colunas.
+   Considera-se a primeira dimensao da matriz como linhas e a segunda como colunas.*/
+
+int matrizEscores[maxSeq+1][maxSeq+1];
 
 int tamSeqMaior=6,  /* tamanho da sequencia maior, inicializado como 6 */
     tamSeqMenor=6,  /* tamanho da sequencia menor, inicializado como 6 */
     tamAlinha,      /* tamanho do alinhamento global obtido */
-    penalGap=0,     /* penalidade de gap, a ser descontada no score acumulado */
-    grauMuta=0,     /* porcentagem maxima de mutacao na geracao aleatoria
-                       da sequencia menor, a qual eh copiada da maior e
-                       sofre algumas trocas de bases */
-    diagScore,      /* score da diagonal anterior da matriz de scores */
-    linScore,       /* score da linha anterior da matriz de scores */
-    colScore;       /* score da coluna anterior da matriz de scores */
+    penalGap=0,     /* penalidade de gap, a ser descontada no escore acumulado */
+    grauMuta=0,     /* porcentagem maxima de mutacao na geracao aleatoria da
+                       sequencia menor, a qual eh copiada da maior e sofre algumas
+                       trocas de bases */
+    diagEscore,      /* escore da diagonal anterior da matriz de escores */
+    linEscore,       /* escore da linha anterior da matriz de escores */
+    colEscore;       /* escore da coluna anterior da matriz de escores */
 
-/*  matrizPesos contem os pesos do pareamento de bases. Estruturada e
-    inicializada conforme segue, onde cada linha ou coluna se refere a
-    uma das bases A, T, G ou C. Considera-se a primeira dimensao da
-    matriz como linhas e a segunda como colunas.
+/*  matrizPesos contem os pesos do pareamento de bases. Estruturada e inicializada
+    conforme segue, onde cada linha ou coluna se refere a uma das bases A, T, G
+    ou C. Considera-se a primeira dimensao da matriz como linhas e a segunda como
+    colunas.
 
        A T G C
        0 1 2 3
@@ -104,6 +111,7 @@ int tamSeqMaior=6,  /* tamanho da sequencia maior, inicializado como 6 */
    G 2 0 0 1 0
    C 3 0 0 0 1
 */
+
 int matrizPesos[4][4]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
 
 
@@ -150,7 +158,7 @@ void leMatrizPesos()
   {
     for (j=0; j<4; j++)
     {
-      printf("Digite valor %c x %c = ", baseMapa[i], baseMapa[j]);
+      printf("Digite valor %c x %c = ", mapaBases[i], mapaBases[j]);
       scanf("%d",&(matrizPesos[i][j]));
     }
     printf("\n");
@@ -165,7 +173,7 @@ void mostraMatrizPesos(void)
   printf("\n%4c%4c%4c%4c%4c\n",' ','A','T','G','C');
   for (i=0; i<4; i++)
   {
-    printf("%4c",baseMapa[i]);
+    printf("%4c",mapaBases[i]);
     for (j=0; j<4; j++)
       printf("%4d",matrizPesos[i][j]);
     printf("\n");
@@ -173,11 +181,11 @@ void mostraMatrizPesos(void)
 }
 
 
-/* leitura da porcentagem maxima (grau) de mutacao aleatoria. Essa
-   porcentagem eh usada na geracao aleatoria da seqMenor. A seqMenor,
-   apohs extraida da seqMaior, sobre algumas trocas de bases, para
-   causar alguma diferenciacao aleatoria. A quantidade de trocas
-   realizadas eh no maximo a porcentagem aqui informada. */
+/* leitura da porcentagem maxima (grau) de mutacao aleatoria. Essa porcentagem eh
+   usada na geracao aleatoria da seqMenor. A seqMenor eh obtida a partir da seqMaior, para se parecer com ela, se diferenciando
+   por um certo grau de alteracoes em suas bases, fornecida pelo usuario. Esse
+   metodo evita a gera��o aleatoria de sequencias totalmente diferentes. A
+   quantidade de trocas realizadas eh no maximo a porcentagem aqui informada. */
 
 int leGrauMutacao(void)
 { int prob;
@@ -194,6 +202,7 @@ int leGrauMutacao(void)
 /* leitura manual das sequencias de entrada seqMaior e seqMenor */
 void leSequencias(void)
 { int i, erro;
+  char seqMaiorAux[maxSeq], seqMenorAux[maxSeq];
 
   printf("\nLeitura das Sequencias:\n");
 
@@ -204,23 +213,23 @@ void leSequencias(void)
     printf("\nDigite apenas caracteres 'A', 'T', 'G' e 'C'");
     do
     { printf("\n> ");
-      fgets(seqMaior,maxSeq,stdin);
-      tamSeqMaior=strlen(seqMaior)-1; /* remove o enter */
+      fgets(seqMaiorAux,maxSeq,stdin);
+      tamSeqMaior=strlen(seqMaiorAux)-1; /* remove o enter */
     } while (tamSeqMaior<1);
     printf("\ntamSeqMaior = %d\n",tamSeqMaior);
     i=0;
     erro=0;
     do
     {
-      switch (seqMaior[i])
+      switch (seqMaiorAux[i])
       {
-        case 'A': seqMaior[i]=(char)A;
+        case 'A': seqMaior[i]=A;
                   break;
-        case 'T': seqMaior[i]=(char)T;
+        case 'T': seqMaior[i]=T;
                   break;
-        case 'G': seqMaior[i]=(char)G;
+        case 'G': seqMaior[i]=G;
                   break;
-        case 'C': seqMaior[i]=(char)C;
+        case 'C': seqMaior[i]=C;
                   break;
         default: erro=1;  /* nao eh permitido qquer outro caractere */
       }
@@ -228,15 +237,15 @@ void leSequencias(void)
     } while ((erro==0)&&(i<tamSeqMaior));
   }while (erro==1);
 
-  /* lendo a sequencia maior */
+  /* lendo a sequencia menor */
   do
   {
     printf("\nPara a Sequencia Menor, ");
     printf("\nDigite apenas caracteres 'A', 'T', 'G' e 'C'");
     do
     { printf("\n> ");
-      fgets(seqMenor,maxSeq,stdin);
-      tamSeqMenor=strlen(seqMenor)-1; /* remove o enter */
+      fgets(seqMenorAux,maxSeq,stdin);
+      tamSeqMenor=strlen(seqMenorAux)-1; /* remove o enter */
     } while ((tamSeqMenor<1)||(tamSeqMenor>tamSeqMaior));
     printf("\ntamSeqMenor = %d\n",tamSeqMenor);
 
@@ -244,15 +253,15 @@ void leSequencias(void)
     erro=0;
     do
     {
-      switch (seqMenor[i])
+      switch (seqMenorAux[i])
       {
-        case 'A': seqMenor[i]=(char)A;
+        case 'A': seqMenor[i]=A;
                   break;
-        case 'T': seqMenor[i]=(char)T;
+        case 'T': seqMenor[i]=T;
                   break;
-        case 'G': seqMenor[i]=(char)G;
+        case 'G': seqMenor[i]=G;
                   break;
-        case 'C': seqMenor[i]=(char)C;
+        case 'C': seqMenor[i]=C;
                   break;
         default: erro=1;
       }
@@ -262,26 +271,23 @@ void leSequencias(void)
 }
 
 
-/* geracao das sequencias aleatorias, conforme tamanho. Gera-se numeros
-   aleatorios de 0 a 3 representando as bases 'A', 'T', 'G' e 'C'.
-   Gera-se primeiramente a maior sequencia e desta extrai a menor
-   sequencia. A menor sequencia ainda sofre algumas trocas de bases ou
-   mutacoes, de acordo com o grau de mutacao informado. A ideia eh
-   gerar sequencias parecidas, mas com certo grau de diferenca. */
+/* geracao das sequencias aleatorias, conforme tamanho. Gera-se numeros aleatorios
+   de 0 a 3 representando as bases 'A', 'T', 'G' e 'C'. Gera-se primeiramente a
+   maior sequencia e desta extrai a menor sequencia. A menor sequencia eh obtida
+   da maior por meio de algumas trocas de bases (mutacoes), de acordo com o grau
+   de mutacao informado. A ideia eh gerar sequencias parecidas, mas com certo grau
+   de diferenca. */
 
 void geraSequencias(void)
 {   int i, dif, probAux, ind, nTrocas;
     char base;
-
-    srand(time(NULL));
 
     printf("\nGeracao Aleatoria das Sequencias:\n");
 
     /* gerando a sequencia maior */
     for (i=0; i<tamSeqMaior; i++)
       {
-        base=(char)(rand()%4); /* produz valores de 0 a 3 e os converte
-                                  em char */
+        base=rand()%4; /* produz valores de 0 a 3 */
         seqMaior[i]= base;
       }
 
@@ -289,12 +295,13 @@ void geraSequencias(void)
 
     ind=0;
     if (dif>0)
-      ind=rand()%dif; /* produz um indice aleatorio na sequencia maior
-                       para a partir dela copiar a sequencia menor */
+      ind=rand()%dif; /* produz um indice aleatorio para indexar a sequencia maior,
+                         para a partir dele extrair a primeira versao da sequencia
+                         menor */
 
-    /* gerando a sequencia menor a partir da maior. Copia trecho da
-       sequencia maior, a partir de um indice aleatorio que nao
-       ultrapasse os limites do vetor maior */
+    /* gerando a sequencia menor a partir da maior. Copia trecho da sequencia
+       maior, a partir de um indice aleatorio que nao ultrapasse os limites do
+       vetor maior */
     for (i=0; i<tamSeqMenor; i++)
         seqMenor[i]=seqMaior[ind+i];
 
@@ -307,18 +314,19 @@ void geraSequencias(void)
 
     i=0;
     nTrocas=0;
-    while ((i<tamSeqMenor)&&(nTrocas<grauMuta))
+    while ((i<tamSeqMenor)&&(nTrocas<((grauMuta*tamSeqMenor)/100)))
     {
-      probAux=rand()%100;
+      probAux=rand()%100+1;
 
-      if (probAux<grauMuta)
+      if (probAux<=grauMuta)
       {
         seqMenor[i]=(seqMenor[i]+(rand()%3)+1)%4;
         nTrocas++;
       }
+      i++;
     }
 
-    printf("\nSequencias Geradas, Dif = %d Ind = %d\n",dif, ind);
+    printf("\nSequencias Geradas: Dif = %d, Ind = %d, NTrocas = %d\n ",dif, ind, nTrocas);
 }
 
 /* mostra das sequencias seqMaior e seqMenor */
@@ -327,43 +335,43 @@ void mostraSequencias(void)
 
   printf("\nSequencias Atuais:\n");
   printf("\nSequencia Maior, Tam = %d\n", tamSeqMaior);
-  printf("%c",baseMapa[(int)seqMaior[0]]);
+  printf("%c",mapaBases[seqMaior[0]]);
   for (i=1; i<tamSeqMaior; i++)
-    printf("%c",baseMapa[(int)seqMaior[i]]);
+    printf("%c",mapaBases[seqMaior[i]]);
   printf("\n");
 
   printf("\nSequencia Menor, Tam = %d\n", tamSeqMenor);
-  printf("%c",baseMapa[(int)seqMenor[0]]);
+  printf("%c",mapaBases[seqMenor[0]]);
   for (i=1; i<tamSeqMenor; i++)
-    printf("%c",baseMapa[(int)seqMenor[i]]);
+    printf("%c",mapaBases[seqMenor[i]]);
   printf("\n");
 }
 
-/* geraMatrizScores gera a matriz de scores. A matriz de scores tera
+/* geraMatrizEscores gera a matriz de escores. A matriz de escores tera
    tamSeqMenor+1 linhas e tamSeqMaior+1 colunas. A linha 0 e a coluna
    0 s�o adicionadas para representar gaps e conter penalidades. As
    demais linhas e colunas s�o associadas as bases da seqMenor e da
    SeqMaior, respectivamente. */
 
-void geraMatrizScores(void)
+void geraMatrizEscores(void)
 { int lin, col, peso, linMaior, colMaior, maior;
 
-  printf("\nGeracao da Matriz de Scores:\n");
-  /*  A matriz ser� gerada considerando que ela representa o cruzamento
+  printf("\nGeracao da Matriz de escores:\n");
+  /*  A matriz sera gerada considerando que ela representa o cruzamento
       da seqMenor[] associada as linhas e a seqMaior[] associada as
       colunas. */
 
   /* inicializando a linha de penalidades/gaps */
   for (col=0; col<=tamSeqMaior; col++)
-    matrizScores[0][col]=-1*(col*penalGap);
+    matrizEscores[0][col]=-1*(col*penalGap);
 
   /* inicializando a coluna de penalidades/gaps */
   for (lin=0; lin<=tamSeqMenor; lin++)
-    matrizScores[lin][0]=-1*(lin*penalGap);
+    matrizEscores[lin][0]=-1*(lin*penalGap);
 
-  /* calculando os demais scores, percorrendo todas as posicoes
+  /* calculando os demais escores, percorrendo todas as posicoes
      da matriz, linha por linha, coluna por coluna, aplicando
-     a seguinte f�rmula:
+     a seguinte formula:
                              / f(lin-1,col-1)+matrizPesos[lin,col]
      f(lin,col) = m�ximo de {  f(lin,col-1)-penalGap
                              \ f(lin-1,col)-penalGap
@@ -373,46 +381,46 @@ void geraMatrizScores(void)
   {
     for (col=1; col<=tamSeqMaior; col++)
     {
-      peso=matrizPesos[(int)(seqMenor[lin-1])][(int)(seqMaior[col-1])];
-      diagScore = matrizScores[lin-1][col-1]+peso;
-      linScore = matrizScores[lin][col-1]-penalGap;
-      colScore = matrizScores[lin-1][col]-penalGap;
+      peso=matrizPesos[(seqMenor[lin-1])][(seqMaior[col-1])];
+      diagEscore = matrizEscores[lin-1][col-1]+peso;
+      linEscore = matrizEscores[lin][col-1]-penalGap;
+      colEscore = matrizEscores[lin-1][col]-penalGap;  // <- erro aqui, no col?
 
-      if ((diagScore>=linScore)&&(diagScore>=colScore))
-        matrizScores[lin][col]=diagScore;
-      else if (linScore>colScore)
-              matrizScores[lin][col]=linScore;
-           else matrizScores[lin][col]=colScore;
+      if ((diagEscore>=linEscore)&&(diagEscore>=colEscore))
+        matrizEscores[lin][col]=diagEscore;
+      else if (linEscore>colEscore)
+              matrizEscores[lin][col]=linEscore;
+           else matrizEscores[lin][col]=colEscore;
     }
   }
 
-  /* localiza o ultimo maior score, e sua posicao */
+  /* localiza o ultimo maior escore, e sua posicao */
 
   linMaior=1;
   colMaior=1;
-  maior=matrizScores[1][1];
+  maior=matrizEscores[1][1];
   for (lin=1; lin<=tamSeqMenor; lin++)
   {
     for (col=1; col<=tamSeqMaior; col++)
     {
-      if (maior<=matrizScores[lin][col])
+      if (maior<=matrizEscores[lin][col])
       {
         linMaior=lin;
         colMaior=col;
-        maior=matrizScores[lin][col];
+        maior=matrizEscores[lin][col];
       }
     }
   }
-  printf("\nMatriz de Scores Gerada.");
-  printf("\nUltimo Maior Score = %d na celula [%d,%d]", maior, linMaior, colMaior);
+  printf("\nMatriz de escores Gerada.");
+  printf("\nUltimo Maior escore = %d na celula [%d,%d]", maior, linMaior, colMaior);
 }
 
 
-/* imprime a matriz de scores de acordo */
-void mostraMatrizScores()
+/* imprime a matriz de escores de acordo */
+void mostraMatrizEscores()
 { int i, lin, col;
 
-  printf("\nMatriz de Scores Atual:\n");
+  printf("\nMatriz de escores Atual:\n");
 
   printf("%4c%4c",' ',' ');
   for (i=0; i<=tamSeqMaior; i++)
@@ -421,20 +429,20 @@ void mostraMatrizScores()
 
   printf("%4c%4c%4c",' ',' ','-');
   for (i=0; i<tamSeqMaior; i++)
-    printf("%4c",baseMapa[(int)(seqMaior[i])]);
+    printf("%4c",mapaBases[(seqMaior[i])]);
   printf("\n");
 
   printf("%4c%4c",'0','-');
   for (col=0; col<=tamSeqMaior; col++)
-    printf("%4d",matrizScores[0][col]);
+    printf("%4d",matrizEscores[0][col]);
   printf("\n");
 
   for (lin=1;lin<=tamSeqMenor;lin++)
   {
-    printf("%4d%4c",lin,baseMapa[(int)(seqMenor[lin-1])]);
+    printf("%4d%4c",lin,mapaBases[(seqMenor[lin-1])]);
     for (col=0;col<=tamSeqMaior;col++)
     {
-      printf("%4d",matrizScores[lin][col]);
+      printf("%4d",matrizEscores[lin][col]);
     }
     printf("\n");
   }
@@ -447,24 +455,24 @@ void mostraAlinhamentoGlobal(void)
 
   printf("\nAlinhamentos Atuais - Tamanho = %d:\n", tamAlinha);
 
-  printf("%c",baseMapa[(int)alinhaMaior[0]]);
+  printf("%c",mapaBases[alinhaGMaior[0]]);
   for (i=1; i<tamAlinha; i++)
-    printf("%c",baseMapa[(int)alinhaMaior[i]]);
+    printf("%c",mapaBases[alinhaGMaior[i]]);
   printf("\n");
 
-  printf("%c",baseMapa[(int)alinhaMenor[0]]);
+  printf("%c",mapaBases[alinhaGMenor[0]]);
   for (i=1; i<tamAlinha; i++)
-    printf("%c",baseMapa[(int)alinhaMenor[i]]);
+    printf("%c",mapaBases[alinhaGMenor[i]]);
   printf("\n");
 }
 
-/* gera o alinhamento global por meio do retorno na Matriz de Scores
+/* gera o alinhamento global por meio do retorno na Matriz de escores
    da celula final (tamSeqMenor,tamSeqMaior) ateh a celula inicial (0,0).
-   A partir da celula final, retorna-se para a celula de onde o score
+   A partir da celula final, retorna-se para a celula de onde o escore
    atual foi derivado. Repete-se esse processo a partir desta celula
    retornada e assim sucessivamente, ateh alcancar a celula inicial.
-   O alinhamento global � composto por duas sequencias alinhaMenor e
-   alinhaMaior. */
+   O alinhamento global � composto por duas sequencias alinhaGMenor e
+   alinhaGMaior. */
 void traceBack()
 { int tbLin, tbCol, peso, pos, posAux, aux, i;
 
@@ -474,30 +482,30 @@ void traceBack()
   pos=0;
   do
   {
-    peso=matrizPesos[(int)(seqMenor[tbLin-1])][(int)(seqMaior[tbCol-1])];
-    diagScore = matrizScores[tbLin-1][tbCol-1]+peso;
-    linScore = matrizScores[tbLin][tbCol-1]-penalGap;
-    colScore = matrizScores[tbLin-1][tbCol]-penalGap;
+    peso=matrizPesos[(seqMenor[tbLin-1])][(seqMaior[tbCol-1])];
+    diagEscore = matrizEscores[tbLin-1][tbCol-1]+peso;
+    linEscore = matrizEscores[tbLin][tbCol-1]-penalGap;
+    colEscore = matrizEscores[tbLin-1][tbCol]-penalGap;
 
-      if ((diagScore>=linScore)&&(diagScore>=colScore))
+      if ((diagEscore>=linEscore)&&(diagEscore>=colEscore))
       {
-        alinhaMenor[pos]=seqMenor[tbLin-1];
-        alinhaMaior[pos]=seqMaior[tbCol-1];
+        alinhaGMenor[pos]=seqMenor[tbLin-1];
+        alinhaGMaior[pos]=seqMaior[tbCol-1];
         tbLin--;
         tbCol--;
         pos++;
       }
-      else if (linScore>colScore)
+      else if (linEscore>colEscore)
            {
-              alinhaMenor[pos]=(char)4;
-              alinhaMaior[pos]=seqMaior[tbCol-1];
+              alinhaGMenor[pos]=X;
+              alinhaGMaior[pos]=seqMaior[tbCol-1];
               tbCol--;
               pos++;
            }
            else
            {
-              alinhaMenor[pos]=seqMenor[tbLin-1];
-              alinhaMaior[pos]=(char)4;
+              alinhaGMenor[pos]=seqMenor[tbLin-1];
+              alinhaGMaior[pos]=X;
               tbLin--;
               pos++;
            }
@@ -507,8 +515,8 @@ void traceBack()
   /* descarrega o restante de gaps da linha 0, se for o caso */
   while (tbLin>0)
   {
-    alinhaMenor[pos]=seqMenor[tbLin-1];
-    alinhaMaior[pos]=(char)4;
+    alinhaGMenor[pos]=seqMenor[tbLin-1];
+    alinhaGMaior[pos]=X;
     tbLin--;
     pos++;
   }
@@ -516,8 +524,8 @@ void traceBack()
   /* descarrega o restante de gaps da coluna 0, se for o caso */
   while (tbCol>0)
   {
-    alinhaMenor[pos]=(char)4;
-    alinhaMaior[pos]=seqMaior[tbCol-1];
+    alinhaGMenor[pos]=X;
+    alinhaGMaior[pos]=seqMaior[tbCol-1];
     tbCol--;
     pos++;
   }
@@ -528,13 +536,13 @@ void traceBack()
      invertido, conforme segue */
   for (i=0;i<(tamAlinha/2);i++)
   {
-    aux=alinhaMenor[i];
-    alinhaMenor[i]=alinhaMenor[tamAlinha-i-1];
-    alinhaMenor[tamAlinha-i-1]=aux;
+    aux=alinhaGMenor[i];
+    alinhaGMenor[i]=alinhaGMenor[tamAlinha-i-1];
+    alinhaGMenor[tamAlinha-i-1]=aux;
 
-    aux=alinhaMaior[i];
-    alinhaMaior[i]=alinhaMaior[tamAlinha-i-1];
-    alinhaMaior[tamAlinha-i-1]=aux;
+    aux=alinhaGMaior[i];
+    alinhaGMaior[i]=alinhaGMaior[tamAlinha-i-1];
+    alinhaGMaior[tamAlinha-i-1]=aux;
   }
 
   printf("\nAlinhamento Global Gerado.");
@@ -554,8 +562,8 @@ int menuOpcao(void)
     printf("\n<04> Mostrar Penalidade");
     printf("\n<05> Definir Sequencias Genomicas");
     printf("\n<06> Mostrar Sequencias");
-    printf("\n<07> Gerar Matriz de Scores");
-    printf("\n<08> Mostrar Matriz de Scores");
+    printf("\n<07> Gerar Matriz de Escores");
+    printf("\n<08> Mostrar Matriz de Escores");
     printf("\n<09> Gerar Alinhamento Global");
     printf("\n<10> Mostrar Alinhamento Global");
     printf("\n<11> Sair");
@@ -598,9 +606,9 @@ void trataOpcao(int op)
             break;
     case 6: mostraSequencias();
             break;
-    case 7: geraMatrizScores();
+    case 7: geraMatrizEscores();
             break;
-    case 8: mostraMatrizScores();
+    case 8: mostraMatrizEscores();
             break;
     case 9: traceBack();
             break;
@@ -612,6 +620,8 @@ void trataOpcao(int op)
 /* programa principal */
 void main(void)
 { int opcao;
+
+  srand(time(NULL));
 
   do
   {
