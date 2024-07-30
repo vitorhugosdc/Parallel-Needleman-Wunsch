@@ -45,6 +45,11 @@ int numThreads = 1;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+typedef struct {
+    int thread_id;
+    int alignment_index;
+} thread_data_t;
+
 /* leitura do tamanho da sequencia maior */
 void leTamMaior(void) {
     printf("\nLeitura do Tamanho da Sequencia Maior:");
@@ -248,10 +253,6 @@ void mostraSequencias(void) {
     printf("\n");
 }
 
-typedef struct {
-    int thread_id;
-} thread_data_t;
-
 void *preencheMatrizEscores(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
     int lin, col, peso;
@@ -378,65 +379,96 @@ void mostraMatrizEscores(void) {
     }
 }
 
-void traceBack(void) {
-    int tbLin, tbCol, peso, pos, aux, i;
+void *traceBackThread(void *arg) {
+    thread_data_t *data = (thread_data_t *)arg;
+    int tbLin = tamSeqMenor;
+    int tbCol = tamSeqMaior;
+    int pos = 0;
+    int alignment_index = data->alignment_index;
+    int localAlinhaGMaior[maxSeq], localAlinhaGMenor[maxSeq];
+    int localTamAlinha = 0;
 
-    printf("\nGeracao do Alinhamento Global:\n");
-    tbLin = tamSeqMenor;
-    tbCol = tamSeqMaior;
-    pos = 0;
-    do {
-        peso = matrizPesos[seqMenor[tbLin - 1]][seqMaior[tbCol - 1]];
-        diagEscore = matrizEscores[tbLin - 1][tbCol - 1] + peso;
-        linEscore = matrizEscores[tbLin][tbCol - 1] - penalGap;
-        colEscore = matrizEscores[tbLin - 1][tbCol] - penalGap;
+    printf("\nGeracao do Alinhamento Global (Thread %d):\n", alignment_index);
+
+    while (tbLin > 0 && tbCol > 0) {
+        int peso = matrizPesos[seqMenor[tbLin - 1]][seqMaior[tbCol - 1]];
+        int diagEscore = matrizEscores[tbLin - 1][tbCol - 1] + peso;
+        int linEscore = matrizEscores[tbLin][tbCol - 1] - penalGap;
+        int colEscore = matrizEscores[tbLin - 1][tbCol] - penalGap;
 
         if (diagEscore >= linEscore && diagEscore >= colEscore) {
-            alinhaGMenor[pos] = seqMenor[tbLin - 1];
-            alinhaGMaior[pos] = seqMaior[tbCol - 1];
+            localAlinhaGMaior[pos] = seqMaior[tbCol - 1];
+            localAlinhaGMenor[pos] = seqMenor[tbLin - 1];
             tbLin--;
             tbCol--;
-            pos++;
         } else if (linEscore > colEscore) {
-            alinhaGMenor[pos] = X;
-            alinhaGMaior[pos] = seqMaior[tbCol - 1];
+            localAlinhaGMaior[pos] = seqMaior[tbCol - 1];
+            localAlinhaGMenor[pos] = X;
             tbCol--;
-            pos++;
         } else {
-            alinhaGMenor[pos] = seqMenor[tbLin - 1];
-            alinhaGMaior[pos] = X;
+            localAlinhaGMaior[pos] = X;
+            localAlinhaGMenor[pos] = seqMenor[tbLin - 1];
             tbLin--;
-            pos++;
         }
-    } while (tbLin != 0 && tbCol != 0);
+        pos++;
+    }
 
     while (tbLin > 0) {
-        alinhaGMenor[pos] = seqMenor[tbLin - 1];
-        alinhaGMaior[pos] = X;
+        localAlinhaGMaior[pos] = X;
+        localAlinhaGMenor[pos] = seqMenor[tbLin - 1];
         tbLin--;
         pos++;
     }
 
     while (tbCol > 0) {
-        alinhaGMenor[pos] = X;
-        alinhaGMaior[pos] = seqMaior[tbCol - 1];
+        localAlinhaGMaior[pos] = seqMaior[tbCol - 1];
+        localAlinhaGMenor[pos] = X;
         tbCol--;
         pos++;
     }
 
-    tamAlinha = pos;
+    localTamAlinha = pos;
 
-    for (i = 0; i < (tamAlinha / 2); i++) {
-        aux = alinhaGMenor[i];
-        alinhaGMenor[i] = alinhaGMenor[tamAlinha - i - 1];
-        alinhaGMenor[tamAlinha - i - 1] = aux;
+    for (int i = 0; i < localTamAlinha / 2; i++) {
+        int aux = localAlinhaGMenor[i];
+        localAlinhaGMenor[i] = localAlinhaGMenor[localTamAlinha - i - 1];
+        localAlinhaGMenor[localTamAlinha - i - 1] = aux;
 
-        aux = alinhaGMaior[i];
-        alinhaGMaior[i] = alinhaGMaior[tamAlinha - i - 1];
-        alinhaGMaior[tamAlinha - i - 1] = aux;
+        aux = localAlinhaGMaior[i];
+        localAlinhaGMaior[i] = localAlinhaGMaior[localTamAlinha - i - 1];
+        localAlinhaGMaior[localTamAlinha - i - 1] = aux;
     }
 
-    printf("\nAlinhamento Global Gerado.");
+    pthread_mutex_lock(&mutex);
+    printf("\nAlinhamento Global (Thread %d) Gerado. Tamanho = %d:\n", alignment_index, localTamAlinha);
+    for (int i = 0; i < localTamAlinha; i++) {
+        printf("%c", mapaBases[localAlinhaGMaior[i]]);
+    }
+    printf("\n");
+    for (int i = 0; i < localTamAlinha; i++) {
+        printf("%c", mapaBases[localAlinhaGMenor[i]]);
+    }
+    printf("\n");
+    pthread_mutex_unlock(&mutex);
+
+    pthread_exit(NULL);
+}
+
+void traceBack(void) {
+    pthread_t threads[numAlignments];
+    thread_data_t thread_data[numAlignments];
+
+    for (int i = 0; i < numAlignments; i++) {
+        thread_data[i].thread_id = i;
+        thread_data[i].alignment_index = i;
+        pthread_create(&threads[i], NULL, traceBackThread, (void *)&thread_data[i]);
+    }
+
+    for (int i = 0; i < numAlignments; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    printf("\nTodos os alinhamentos foram gerados.\n");
 }
 
 void mostraAlinhamentoGlobal(void) {
