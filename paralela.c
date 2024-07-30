@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 
 #define A 0 // representa uma base Adenina
 #define T 1 // representa uma base Timina
@@ -9,7 +10,7 @@
 #define C 3 // representa uma base Citosina
 #define X 4 // representa um gap
 
-#define sair 12
+#define sair 13
 
 #define maxSeq 10000
 
@@ -39,7 +40,10 @@ int matrizPesos[4][4] = {
     {0, 0, 0, 1}
 };
 
-int numAlignments = 1; // Número de alinhamentos a serem exibidos
+int numAlignments = 1;
+int numThreads = 1;
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* leitura do tamanho da sequencia maior */
 void leTamMaior(void) {
@@ -244,26 +248,22 @@ void mostraSequencias(void) {
     printf("\n");
 }
 
-void geraMatrizEscores(void) {
-    int lin, col, peso, linMaior, colMaior, maior;
+typedef struct {
+    int thread_id;
+} thread_data_t;
 
-    printf("\nGeracao da Matriz de escores:\n");
+void *preencheMatrizEscores(void *arg) {
+    thread_data_t *data = (thread_data_t *)arg;
+    int lin, col, peso;
 
-    for (col = 0; col <= tamSeqMaior; col++) {
-        matrizEscores[0][col] = -1 * (col * penalGap);
-    }
-
-    for (lin = 0; lin <= tamSeqMenor; lin++) {
-        matrizEscores[lin][0] = -1 * (lin * penalGap);
-    }
-
-    for (lin = 1; lin <= tamSeqMenor; lin++) {
+    for (lin = data->thread_id; lin <= tamSeqMenor; lin += numThreads) {
         for (col = 1; col <= tamSeqMaior; col++) {
             peso = matrizPesos[seqMenor[lin - 1]][seqMaior[col - 1]];
             diagEscore = matrizEscores[lin - 1][col - 1] + peso;
             linEscore = matrizEscores[lin][col - 1] - penalGap;
             colEscore = matrizEscores[lin - 1][col] - penalGap;
 
+            pthread_mutex_lock(&mutex);
             if (diagEscore >= linEscore && diagEscore >= colEscore) {
                 matrizEscores[lin][col] = diagEscore;
             } else if (linEscore > colEscore) {
@@ -271,14 +271,41 @@ void geraMatrizEscores(void) {
             } else {
                 matrizEscores[lin][col] = colEscore;
             }
+            pthread_mutex_unlock(&mutex);
         }
     }
+    pthread_exit(NULL);
+}
 
-    linMaior = 1;
-    colMaior = 1;
-    maior = matrizEscores[1][1];
-    for (lin = 1; lin <= tamSeqMenor; lin++) {
-        for (col = 1; col <= tamSeqMaior; col++) {
+void geraMatrizEscores(void) {
+    int col;
+    pthread_t threads[numThreads];
+    thread_data_t thread_data[numThreads];
+
+    printf("\nGeracao da Matriz de escores:\n");
+
+    for (col = 0; col <= tamSeqMaior; col++) {
+        matrizEscores[0][col] = -1 * (col * penalGap);
+    }
+
+    for (int lin = 0; lin <= tamSeqMenor; lin++) {
+        matrizEscores[lin][0] = -1 * (lin * penalGap);
+    }
+
+    for (int i = 0; i < numThreads; i++) {
+        thread_data[i].thread_id = i;
+        pthread_create(&threads[i], NULL, preencheMatrizEscores, (void *)&thread_data[i]);
+    }
+
+    for (int i = 0; i < numThreads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    int linMaior = 1;
+    int colMaior = 1;
+    int maior = matrizEscores[1][1];
+    for (int lin = 1; lin <= tamSeqMenor; lin++) {
+        for (int col = 1; col <= tamSeqMaior; col++) {
             if (maior <= matrizEscores[lin][col]) {
                 linMaior = lin;
                 colMaior = col;
@@ -440,6 +467,16 @@ void leNumAlignments(void) {
     } while (numAlignments < 1);
 }
 
+void leNumThreads(void) {
+    printf("\nDigite o numero de threads a serem usados: ");
+    do {
+        scanf("%d", &numThreads);
+        if (numThreads < 1) {
+            printf("Numero invalido. Digite novamente: ");
+        }
+    } while (numThreads < 1);
+}
+
 int menuOpcao(void) {
     int op;
     char enter;
@@ -457,7 +494,8 @@ int menuOpcao(void) {
         printf("\n<09> Gerar Alinhamento Global");
         printf("\n<10> Mostrar Alinhamento Global");
         printf("\n<11> Salvar Matriz de Escores em Arquivo");
-        printf("\n<12> Sair");
+        printf("\n<12> Definir Numero de Threads");
+        printf("\n<13> Sair");
         printf("\nDigite a opcao => ");
         scanf("%d", &op);
         scanf("%c", &enter);
@@ -517,6 +555,9 @@ void trataOpcao(int op) {
         case 11:
             salvaMatrizEscores("matriz_escores.txt");
             break;
+        case 12:
+            leNumThreads();
+            break;
     }
 }
 
@@ -531,6 +572,8 @@ int main(void) {
         trataOpcao(opcao);
 
     } while (opcao != sair);
+
+    pthread_mutex_destroy(&mutex);
 
     return 0;
 }
