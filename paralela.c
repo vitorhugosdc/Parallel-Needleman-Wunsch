@@ -440,6 +440,14 @@ void *traceBackThread(void *arg) {
     }
 
     pthread_mutex_lock(&mutex);
+    
+    if (alignment_index == 0) {
+        memcpy(alinhaGMaior, localAlinhaGMaior, sizeof(int) * localTamAlinha);
+        memcpy(alinhaGMenor, localAlinhaGMenor, sizeof(int) * localTamAlinha);
+        tamAlinha = localTamAlinha;
+    }
+    pthread_mutex_unlock(&mutex);
+
     printf("\nAlinhamento Global (Thread %d) Gerado. Tamanho = %d:\n", alignment_index, localTamAlinha);
     for (int i = 0; i < localTamAlinha; i++) {
         printf("%c", mapaBases[localAlinhaGMaior[i]]);
@@ -449,7 +457,6 @@ void *traceBackThread(void *arg) {
         printf("%c", mapaBases[localAlinhaGMenor[i]]);
     }
     printf("\n");
-    pthread_mutex_unlock(&mutex);
 
     pthread_exit(NULL);
 }
