@@ -26,7 +26,7 @@ int matrizEscores[maxSeq + 1][maxSeq + 1];
 
 int tamSeqMaior,
     tamSeqMenor,
-    tamAlinha[10], // Armazena o tamanho de cada alinhamento
+    tamAlinha[10],
     penalGap = 0,
     grauMuta = 0,
     diagEscore,
@@ -453,7 +453,6 @@ void *traceBackMultiThread(void *arg) {
 
     pthread_mutex_lock(&mutex);
     if (data->alignment_index < numAlignments) {
-        // Store results only if it's one of the top-k paths
         memcpy(alinhaGMaior[data->alignment_index], localAlinhaGMaior, sizeof(int) * localTamAlinha);
         memcpy(alinhaGMenor[data->alignment_index], localAlinhaGMenor, sizeof(int) * localTamAlinha);
         tamAlinha[data->alignment_index] = localTamAlinha;
