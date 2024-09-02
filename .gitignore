@@ -1,4 +1,4 @@
 sequencial
 threads
 mpi
-*.txt
+matriz_escores.txt
