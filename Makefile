@@ -1,14 +1,17 @@
-CC = cc
-CFLAGS = -lpthread
-TARGETS = sequencial paralela
+CC = mpicc
+CFLAGS = 
+TARGETS = sequencial threads mpi
 
 all: $(TARGETS)
 
 sequencial: sequencial.c
 	$(CC) sequencial.c -o sequencial
 
-paralela: paralela.c
-	$(CC) $(CFLAGS) paralela.c -o paralela
+threads: threads.c
+	$(CC) $(CFLAGS) threads.c -o threads
+
+mpi: mpi.c
+	$(CC) $(CFLAGS) mpi.c -o mpi
 
 clean:
 	rm -f $(TARGETS)

@@ -1,3 +1,4 @@
 sequencial
-paralela
+threads
+mpi
 *.txt
