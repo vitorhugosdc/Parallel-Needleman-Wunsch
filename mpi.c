@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h>
+#include <mpi.h>
+
 
 #define A 0 // representa uma base Adenina
 #define T 1 // representa uma base Timina
@@ -10,23 +11,26 @@
 #define C 3 // representa uma base Citosina
 #define X 4 // representa um gap
 
-#define sair 13
+#define sair 11
 
 #define maxSeq 10000
 
+int rank, size;
+
 char mapaBases[5] = {'A', 'T', 'G', 'C', '-'};
 
-int seqMaior[maxSeq],
-    seqMenor[maxSeq];
+int seqMaior[maxSeq] = {1, 2, 3, 1, 2, 3, 0, 1, 3, 2, 0, 2};  // TGCTGCATCGAG
+int seqMenor[maxSeq] = {1, 2, 3, 0, 1, 2, 0, 2};  // TGCATGAG
 
-int alinhaGMaior[10][maxSeq],
-    alinhaGMenor[10][maxSeq];
+
+int alinhaGMaior[maxSeq],
+    alinhaGMenor[maxSeq];
 
 int matrizEscores[maxSeq + 1][maxSeq + 1];
 
-int tamSeqMaior,
-    tamSeqMenor,
-    tamAlinha[10],
+int tamSeqMaior = 12,
+    tamSeqMenor = 8,
+    tamAlinha,
     penalGap = 0,
     grauMuta = 0,
     diagEscore,
@@ -39,21 +43,6 @@ int matrizPesos[4][4] = {
     {-1, -1, 2, -1},
     {-1, -1, -1, 2}
 };
-
-int numAlignments = 1;
-int numThreads = 1;
-
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-typedef struct {
-    int thread_id;
-    int alignment_index;
-    int start_lin;
-    int start_col;
-    int end_lin;
-} thread_data_t;
-
-int multiple_paths_possible(int lin, int col);
 
 /* leitura do tamanho da sequencia maior */
 void leTamMaior(void) {
@@ -207,6 +196,9 @@ void geraSequencias(void) {
 void leSequenciasArquivo(void) {
     FILE *file;
     char filename[100];
+    char seqMaiorAux[maxSeq];
+    char seqMenorAux[maxSeq];
+
     printf("\nDigite o nome do arquivo para leitura das sequencias: ");
     scanf("%s", filename);
 
@@ -216,27 +208,55 @@ void leSequenciasArquivo(void) {
         return;
     }
 
-    fscanf(file, "%d %d", &tamSeqMaior, &tamSeqMenor);
-    for (int i = 0; i < tamSeqMaior; i++) {
-        fscanf(file, " %c", (char *)&seqMaior[i]);
-        switch (seqMaior[i]) {
-            case 'A': seqMaior[i] = A; break;
-            case 'T': seqMaior[i] = T; break;
-            case 'G': seqMaior[i] = G; break;
-            case 'C': seqMaior[i] = C; break;
+    if (fgets(seqMaiorAux, maxSeq, file) != NULL) {
+        seqMaiorAux[strcspn(seqMaiorAux, "\n")] = '\0';
+        tamSeqMaior = strlen(seqMaiorAux);
+
+        for (int i = 0; i < tamSeqMaior; i++) {
+            switch (seqMaiorAux[i]) {
+                case 'A': seqMaior[i] = A; break;
+                case 'T': seqMaior[i] = T; break;
+                case 'G': seqMaior[i] = G; break;
+                case 'C': seqMaior[i] = C; break;
+                default: 
+                    printf("\nCaractere inválido encontrado na sequência maior: %c\n", seqMaiorAux[i]);
+                    fclose(file);
+                    return;
+            }
         }
+    } else {
+        printf("\nErro ao ler a sequência maior.\n");
+        fclose(file);
+        return;
     }
-    for (int i = 0; i < tamSeqMenor; i++) {
-        fscanf(file, " %c", (char *)&seqMenor[i]);
-        switch (seqMenor[i]) {
-            case 'A': seqMenor[i] = A; break;
-            case 'T': seqMenor[i] = T; break;
-            case 'G': seqMenor[i] = G; break;
-            case 'C': seqMenor[i] = C; break;
+
+    if (fgets(seqMenorAux, maxSeq, file) != NULL) {
+        seqMenorAux[strcspn(seqMenorAux, "\n")] = '\0';
+        tamSeqMenor = strlen(seqMenorAux);
+
+        for (int i = 0; i < tamSeqMenor; i++) {
+            switch (seqMenorAux[i]) {
+                case 'A': seqMenor[i] = A; break;
+                case 'T': seqMenor[i] = T; break;
+                case 'G': seqMenor[i] = G; break;
+                case 'C': seqMenor[i] = C; break;
+                default: 
+                    printf("\nCaractere inválido encontrado na sequência menor: %c\n", seqMenorAux[i]);
+                    fclose(file);
+                    return;
+            }
         }
+    } else {
+        printf("\nErro ao ler a sequência menor.\n");
+        fclose(file);
+        return;
     }
 
     fclose(file);
+
+    printf("\nSequências lidas com sucesso:\n");
+    printf("Sequência Maior (%d): %s\n", tamSeqMaior, seqMaiorAux);
+    printf("Sequência Menor (%d): %s\n", tamSeqMenor, seqMenorAux);
 }
 
 void mostraSequencias(void) {
@@ -258,77 +278,128 @@ void mostraSequencias(void) {
     printf("\n");
 }
 
-void *preencheMatrizEscores(void *arg) {
-    thread_data_t *data = (thread_data_t *)arg;
+void geraMatrizEscores()
+{
+    int tamBloco;
     int lin, col, peso;
+    MPI_Status status;
+    MPI_Request request;
 
-    if (data->start_lin > tamSeqMenor) {
-        pthread_exit(NULL);
+    if (rank == 0) {
+        printf("Insira o tamanho do bloco: ");
+        scanf("%d", &tamBloco);
+        for (int i = 1; i < size; i++) {
+            MPI_Send(&tamBloco, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        }
+    } else {
+        MPI_Recv(&tamBloco, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
     }
 
-    for (lin = data->start_lin; lin <= data->end_lin; lin++) {
-        for (col = 1; col <= tamSeqMaior; col++) {
-            peso = matrizPesos[seqMenor[lin - 1]][seqMaior[col - 1]];
-            diagEscore = matrizEscores[lin - 1][col - 1] + peso;
-            linEscore = matrizEscores[lin][col - 1] - penalGap;
-            colEscore = matrizEscores[lin - 1][col] - penalGap;
+    if (rank == 0){
+        for (col = 0; col <= tamSeqMaior; col++){
+            matrizEscores[0][col] = -col * penalGap;
+        }
 
-            if (diagEscore >= linEscore && diagEscore >= colEscore) {
-                matrizEscores[lin][col] = diagEscore;
-            } else if (linEscore > colEscore) {
-                matrizEscores[lin][col] = linEscore;
-            } else {
-                matrizEscores[lin][col] = colEscore;
+        for (lin = 1; lin <= tamSeqMenor; lin++){
+            matrizEscores[lin][0] = -lin * penalGap;
+        }
+
+        for (int i = 1; i < size; i++){
+            MPI_Send(matrizEscores[0], tamSeqMaior + 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+            for (lin = 1; lin <= tamSeqMenor; lin++){
+                MPI_Send(&matrizEscores[lin][0], 1, MPI_INT, i, 0, MPI_COMM_WORLD);
             }
         }
     }
-    pthread_exit(NULL);
-}
-
-void geraMatrizEscores(void) {
-    int col;
-    pthread_t threads[numThreads];
-    thread_data_t thread_data[numThreads];
-
-    printf("\nGeracao da Matriz de escores:\n");
-
-    for (col = 0; col <= tamSeqMaior; col++) {
-        matrizEscores[0][col] = -1 * (col * penalGap);
-    }
-
-    for (int lin = 0; lin <= tamSeqMenor; lin++) {
-        matrizEscores[lin][0] = -1 * (lin * penalGap);
-    }
-
-    int linhas_por_thread = (tamSeqMenor + numThreads - 1) / numThreads;
-    for (int i = 0; i < numThreads; i++) {
-        thread_data[i].thread_id = i;
-        thread_data[i].start_lin = i * linhas_por_thread + 1;
-        thread_data[i].end_lin = (i + 1) * linhas_por_thread;
-        if (thread_data[i].end_lin > tamSeqMenor) {
-            thread_data[i].end_lin = tamSeqMenor;
+    else{
+        MPI_Recv(matrizEscores[0], tamSeqMaior + 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+        for (lin = 1; lin <= tamSeqMenor; lin++){
+            MPI_Recv(&matrizEscores[lin][0], 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
         }
-        pthread_create(&threads[i], NULL, preencheMatrizEscores, (void *)&thread_data[i]);
     }
 
-    for (int i = 0; i < numThreads; i++) {
-        pthread_join(threads[i], NULL);
-    }
+    if (rank > 0){
+        for (lin = rank; lin <= tamSeqMenor; lin += size - 1){
+            for (col = 1; col <= tamSeqMaior; col++){
+                if (col % tamBloco == 1 && lin != 1){
+                    int bloco;
+                    if(col + tamBloco <= tamSeqMaior){
+                        bloco = tamBloco;
+                    }else{
+                        bloco = tamSeqMaior - col + 1;
+                    }
 
-    int linMaior = 1;
-    int colMaior = 1;
-    int maior = matrizEscores[1][1];
-    for (int lin = 1; lin <= tamSeqMenor; lin++) {
-        for (int col = 1; col <= tamSeqMaior; col++) {
-            if (maior <= matrizEscores[lin][col]) {
-                linMaior = lin;
-                colMaior = col;
-                maior = matrizEscores[lin][col];
+                    int proc;
+                    if(rank == 1){
+                        proc = size - 1;
+                    }else{
+                        proc = rank -1;
+                    }
+
+                    MPI_Recv(&matrizEscores[lin - 1][col], bloco, MPI_INT, proc, 0, MPI_COMM_WORLD, &status);
+                }
+
+                peso = matrizPesos[seqMenor[lin - 1]][seqMaior[col - 1]];
+                int diagEscore = matrizEscores[lin - 1][col - 1] + peso;
+                int linEscore = matrizEscores[lin][col - 1] - penalGap;
+                int colEscore = matrizEscores[lin - 1][col] - penalGap;
+
+                if (diagEscore >= linEscore && diagEscore >= colEscore) {
+                    matrizEscores[lin][col] = diagEscore;
+                } else if (linEscore > colEscore) {
+                    matrizEscores[lin][col] = linEscore;
+                } else {
+                    matrizEscores[lin][col] = colEscore;
+                }
+
+                if (col % tamBloco == 0 || col == tamSeqMaior){
+                    int bloco;
+                    if(col % tamBloco == 0){
+                        bloco = tamBloco;
+                    }else{
+                        bloco = (tamSeqMaior - col + tamBloco - 1) % tamBloco;
+                    }
+                    MPI_Isend(&matrizEscores[lin][col - bloco + 1], bloco, MPI_INT, 0, 0, MPI_COMM_WORLD, &request);
+
+                    if (rank < size - 1){
+                        MPI_Isend(&matrizEscores[lin][col - bloco + 1], bloco, MPI_INT, rank + 1, 0, MPI_COMM_WORLD, &request);
+                    }
+                    else if (rank == size - 1){
+                        MPI_Isend(&matrizEscores[lin][col - bloco + 1], bloco, MPI_INT, 1, 0, MPI_COMM_WORLD, &request);
+                    }
+                }
             }
         }
     }
-    printf("\nMatriz de escores Gerada.");
-    printf("\nUltimo Maior escore = %d na celula [%d,%d]", maior, linMaior, colMaior);
+
+    if (rank == 0){
+        for (int proc = 1; proc < size; proc++){
+            for (lin = proc; lin <= tamSeqMenor; lin += size - 1){
+                for (int b = 0; b < tamSeqMaior; b += tamBloco){
+
+                    int bloco;
+                    if(b + tamBloco <= tamSeqMaior){
+                        bloco = tamBloco;
+                    }else{
+                        bloco = tamSeqMaior - b;
+                    }
+                    MPI_Recv(&matrizEscores[lin][b + 1], bloco, MPI_INT, proc, 0, MPI_COMM_WORLD, &status);
+                }
+            }
+        }
+        int linMaior = 1, colMaior = 1, maior = matrizEscores[1][1];
+        for (lin = 1; lin <= tamSeqMenor; lin++) {
+            for (col = 1; col <= tamSeqMaior; col++) {
+                if (maior <= matrizEscores[lin][col]) {
+                    linMaior = lin;
+                    colMaior = col;
+                    maior = matrizEscores[lin][col];
+                }
+            }
+        }
+        printf("\nMatriz de escores Gerada.");
+        printf("\nUltimo Maior escore = %d na celula [%d,%d]",  maior, linMaior, colMaior);
+    }
 }
 
 /* salva a matriz de escores em um arquivo */
@@ -392,158 +463,95 @@ void mostraMatrizEscores(void) {
     }
 }
 
-void *traceBackMultiThread(void *arg) {
-    thread_data_t *data = (thread_data_t *)arg;
-    int tbLin = data->start_lin;
-    int tbCol = data->start_col;
-    int pos = 0;
-    int localAlinhaGMaior[maxSeq], localAlinhaGMenor[maxSeq];
-    int localTamAlinha = 0;
-    
-    printf("\nGeracao do Alinhamento Global (Thread %d):\n", data->alignment_index);
+void traceBack()
+{ int tbLin, tbCol, peso, pos, posAux, aux, i;
 
-    while (tbLin > 0 && tbCol > 0) {
-        int peso = matrizPesos[seqMenor[tbLin - 1]][seqMaior[tbCol - 1]];
-        int diagEscore = matrizEscores[tbLin - 1][tbCol - 1] + peso;
-        int linEscore = matrizEscores[tbLin][tbCol - 1] - penalGap;
-        int colEscore = matrizEscores[tbLin - 1][tbCol] - penalGap;
+  printf("\nGeracao do Alinhamento Global:\n");
+  tbLin=tamSeqMenor;
+  tbCol=tamSeqMaior;
+  pos=0;
+  do
+  {
+    peso=matrizPesos[(seqMenor[tbLin-1])][(seqMaior[tbCol-1])];
+    diagEscore = matrizEscores[tbLin-1][tbCol-1]+peso;
+    linEscore = matrizEscores[tbLin][tbCol-1]-penalGap;
+    colEscore = matrizEscores[tbLin-1][tbCol]-penalGap;
 
-        if (diagEscore >= linEscore && diagEscore >= colEscore) {
-            localAlinhaGMaior[pos] = seqMaior[tbCol - 1];
-            localAlinhaGMenor[pos] = seqMenor[tbLin - 1];
-            tbLin--;
-            tbCol--;
-        } else if (linEscore >= colEscore) {
-            localAlinhaGMaior[pos] = seqMaior[tbCol - 1];
-            localAlinhaGMenor[pos] = X;
-            tbCol--;
-        } else {
-            localAlinhaGMaior[pos] = X;
-            localAlinhaGMenor[pos] = seqMenor[tbLin - 1];
-            tbLin--;
-        }
-        pos++;
-    }
-
-    while (tbLin > 0) {
-        localAlinhaGMaior[pos] = X;
-        localAlinhaGMenor[pos] = seqMenor[tbLin - 1];
+      if ((diagEscore>=linEscore)&&(diagEscore>=colEscore))
+      {
+        alinhaGMenor[pos]=seqMenor[tbLin-1];
+        alinhaGMaior[pos]=seqMaior[tbCol-1];
         tbLin--;
-        pos++;
-    }
-
-    while (tbCol > 0) {
-        localAlinhaGMaior[pos] = seqMaior[tbCol - 1];
-        localAlinhaGMenor[pos] = X;
         tbCol--;
         pos++;
-    }
+      }
+      else if (linEscore>colEscore)
+           {
+              alinhaGMenor[pos]=X;
+              alinhaGMaior[pos]=seqMaior[tbCol-1];
+              tbCol--;
+              pos++;
+           }
+           else
+           {
+              alinhaGMenor[pos]=seqMenor[tbLin-1];
+              alinhaGMaior[pos]=X;
+              tbLin--;
+              pos++;
+           }
 
-    localTamAlinha = pos;
+  } while ((tbLin!=0)&&(tbCol!=0));
 
-    for (int i = 0; i < localTamAlinha / 2; i++) {
-        int aux = localAlinhaGMenor[i];
-        localAlinhaGMenor[i] = localAlinhaGMenor[localTamAlinha - i - 1];
-        localAlinhaGMenor[localTamAlinha - i - 1] = aux;
+  /* descarrega o restante de gaps da linha 0, se for o caso */
+  while (tbLin>0)
+  {
+    alinhaGMenor[pos]=seqMenor[tbLin-1];
+    alinhaGMaior[pos]=X;
+    tbLin--;
+    pos++;
+  }
 
-        aux = localAlinhaGMaior[i];
-        localAlinhaGMaior[i] = localAlinhaGMaior[localTamAlinha - i - 1];
-        localAlinhaGMaior[localTamAlinha - i - 1] = aux;
-    }
+  /* descarrega o restante de gaps da coluna 0, se for o caso */
+  while (tbCol>0)
+  {
+    alinhaGMenor[pos]=X;
+    alinhaGMaior[pos]=seqMaior[tbCol-1];
+    tbCol--;
+    pos++;
+  }
 
-    pthread_mutex_lock(&mutex);
-    if (data->alignment_index < numAlignments) {
-        memcpy(alinhaGMaior[data->alignment_index], localAlinhaGMaior, sizeof(int) * localTamAlinha);
-        memcpy(alinhaGMenor[data->alignment_index], localAlinhaGMenor, sizeof(int) * localTamAlinha);
-        tamAlinha[data->alignment_index] = localTamAlinha;
-    }
-    pthread_mutex_unlock(&mutex);
+  tamAlinha=pos;
 
-    printf("\nAlinhamento Global (Thread %d) Gerado. Tamanho = %d:\n", data->alignment_index, localTamAlinha);
-    for (int i = 0; i < localTamAlinha; i++) {
-        printf("%c", mapaBases[localAlinhaGMaior[i]]);
-    }
-    printf("\n");
-    for (int i = 0; i < localTamAlinha; i++) {
-        printf("%c", mapaBases[localAlinhaGMenor[i]]);
-    }
-    printf("\n");
+  /* o alinhamento foi feito de tras para frente e deve ser
+     invertido, conforme segue */
+  for (i=0;i<(tamAlinha/2);i++)
+  {
+    aux=alinhaGMenor[i];
+    alinhaGMenor[i]=alinhaGMenor[tamAlinha-i-1];
+    alinhaGMenor[tamAlinha-i-1]=aux;
 
-    pthread_exit(NULL);
+    aux=alinhaGMaior[i];
+    alinhaGMaior[i]=alinhaGMaior[tamAlinha-i-1];
+    alinhaGMaior[tamAlinha-i-1]=aux;
+  }
+
+  printf("\nAlinhamento Global Gerado.");
 }
 
-void traceBackParallel() {
-    pthread_t threads[numAlignments];
-    thread_data_t thread_data[numAlignments];
-    int alignment_count = 0;
+void mostraAlinhamentoGlobal(void)
+{   int i;
 
-    for (int i = tamSeqMenor; i > 0 && alignment_count < numAlignments; i--) {
-        for (int j = tamSeqMaior; j > 0 && alignment_count < numAlignments; j--) {
-            if (multiple_paths_possible(i, j)) {
-                thread_data[alignment_count].thread_id = alignment_count;
-                thread_data[alignment_count].alignment_index = alignment_count;
-                thread_data[alignment_count].start_lin = i;
-                thread_data[alignment_count].start_col = j;
-                pthread_create(&threads[alignment_count], NULL, traceBackMultiThread, (void *)&thread_data[alignment_count]);
-                alignment_count++;
-            }
-        }
-    }
+  printf("\nAlinhamentos Atuais - Tamanho = %d:\n", tamAlinha);
 
-    for (int i = 0; i < alignment_count; i++) {
-        pthread_join(threads[i], NULL);
-    }
+  printf("%c",mapaBases[alinhaGMaior[0]]);
+  for (i=1; i<tamAlinha; i++)
+    printf("%c",mapaBases[alinhaGMaior[i]]);
+  printf("\n");
 
-    printf("\nTodos os alinhamentos foram gerados.\n");
-}
-
-int multiple_paths_possible(int lin, int col) {
-    if (lin == 0 || col == 0) return 0;
-
-    int peso = matrizPesos[seqMenor[lin - 1]][seqMaior[col - 1]];
-    int diagEscore = matrizEscores[lin - 1][col - 1] + peso;
-    int linEscore = matrizEscores[lin][col - 1] - penalGap;
-    int colEscore = matrizEscores[lin - 1][col] - penalGap;
-
-    return (diagEscore == linEscore || diagEscore == colEscore || linEscore == colEscore);
-}
-
-void mostraAlinhamentoGlobal(void) {
-    for (int k = 0; k < numAlignments; k++) {
-        printf("\nAlinhamento %d - Tamanho = %d:\n", k + 1, tamAlinha[k]);
-
-        printf("%c", mapaBases[alinhaGMaior[k][0]]);
-        for (int i = 1; i < tamAlinha[k]; i++) {
-            printf("%c", mapaBases[alinhaGMaior[k][i]]);
-        }
-        printf("\n");
-
-        printf("%c", mapaBases[alinhaGMenor[k][0]]);
-        for (int i = 1; i < tamAlinha[k]; i++) {
-            printf("%c", mapaBases[alinhaGMenor[k][i]]);
-        }
-        printf("\n");
-    }
-}
-
-void leNumAlignments(void) {
-    printf("\nDigite o numero de alinhamentos a serem exibidos: ");
-    do {
-        scanf("%d", &numAlignments);
-        if (numAlignments < 1) {
-            printf("Numero invalido. Digite novamente: ");
-        }
-    } while (numAlignments < 1);
-}
-
-void leNumThreads(void) {
-    printf("\nDigite o numero de threads a serem usados: ");
-    do {
-        scanf("%d", &numThreads);
-        if (numThreads < 1) {
-            printf("Numero invalido. Digite novamente: ");
-        }
-    } while (numThreads < 1);
+  printf("%c",mapaBases[alinhaGMenor[0]]);
+  for (i=1; i<tamAlinha; i++)
+    printf("%c",mapaBases[alinhaGMenor[i]]);
+  printf("\n");
 }
 
 int menuOpcao(void) {
@@ -563,8 +571,7 @@ int menuOpcao(void) {
         printf("\n<09> Gerar Alinhamento Global");
         printf("\n<10> Mostrar Alinhamento Global");
         printf("\n<11> Salvar Matriz de Escores em Arquivo");
-        printf("\n<12> Definir Numero de Threads");
-        printf("\n<13> Sair");
+        printf("\n<12> Sair");
         printf("\nDigite a opcao => ");
         scanf("%d", &op);
         scanf("%c", &enter);
@@ -610,39 +617,50 @@ void trataOpcao(int op) {
             break;
         case 7:
             geraMatrizEscores();
+            salvaMatrizEscores("matriz_escores.txt");
             break;
         case 8:
             mostraMatrizEscores();
             break;
         case 9:
-            leNumAlignments();
-            traceBackParallel();
+            traceBack();
             break;
         case 10:
             mostraAlinhamentoGlobal();
             break;
-        case 11:
-            salvaMatrizEscores("matriz_escores.txt");
-            break;
-        case 12:
-            leNumThreads();
-            break;
     }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     int opcao;
 
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     srand(time(NULL));
 
-    do {
-        printf("\n\nPrograma Needleman-Wunsch Sequencial\n");
-        opcao = menuOpcao();
-        trataOpcao(opcao);
+    if (rank == 0) {
+        do {
+            printf("\n\nPrograma Needleman-Wunsch Paralelizado com MPI\n");
+            opcao = menuOpcao();
 
-    } while (opcao != sair);
+            MPI_Bcast(&opcao, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    pthread_mutex_destroy(&mutex);
+            trataOpcao(opcao);
+
+        } while (opcao != sair);
+    } else {
+        do {
+            MPI_Bcast(&opcao, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+            if (opcao == 7) {
+                geraMatrizEscores();
+            }
+
+        } while (opcao != sair);
+    }
+
+    MPI_Finalize();
 
     return 0;
 }
